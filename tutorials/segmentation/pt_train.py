@@ -115,8 +115,8 @@ def main(loss_type, exp_name, use_aug):
     # train/val split
     idxs = [i for i in range(50)]
     random.Random(99).shuffle(idxs)
-    train_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=training_transform),idxs[:10])
-    val_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=None),idxs[10:])
+    train_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=training_transform),idxs[10:])
+    val_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=None),idxs[:10])
 
     train_loader = torch.utils.data.DataLoader(
         train_set,
