@@ -15,6 +15,9 @@ RandomAffine Transformations (scales=0.1,degrees=5): probability 0.8
 
 
 ## Results
+
+Results are taken at min validation Loss
+
 | Experiment      | Epoch | Dice Score         | IoU                |
 |-----------------|-------|--------------------|--------------------|
 | DICE NO_AUG     | 958   | 0.8196353614330292 | 0.7030864953994751 |
