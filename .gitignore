@@ -1,0 +1,5 @@
+tutorials/segmentation/data
+tutorials/segmentation/runs
+tutorials/segmentation/result
+__pycache__/
+.vscode/
