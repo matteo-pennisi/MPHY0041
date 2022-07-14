@@ -10,8 +10,8 @@ from utils.saver import Saver
 import click
 import seg_metrics.seg_metrics as sg
 from models import UNet
-
-
+import torchio as tio
+import torchvision
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 use_cuda = torch.cuda.is_available()
@@ -56,9 +56,10 @@ def iou_coef(y_true, y_pred, smooth=1):
 
 ## data loader
 class NPyDataset(torch.utils.data.Dataset):
-    def __init__(self, folder_name, is_train=True):
+    def __init__(self, folder_name, is_train=True, transform = None):
         self.folder_name = folder_name
         self.is_train = is_train
+        self.transform = transform
 
     def __len__(self):
         return (50 if self.is_train else 30)
@@ -67,7 +68,15 @@ class NPyDataset(torch.utils.data.Dataset):
         if self.is_train:
             image = self._load_npy("image_train%02d.npy" % idx)
             label = self._load_npy("label_train%02d.npy" % idx)
-            return image, label, idx
+            d = {}
+            d['image'] = tio.ScalarImage(tensor = image)
+            d['mask'] = tio.LabelMap(tensor = label)
+            s = tio.Subject(d)
+            if self.transform is not None:
+                aug_s = self.transform(s)
+                return aug_s['image'].tensor, aug_s['mask'].tensor, idx
+            else:
+                return s['image'].tensor, s['mask'].tensor, idx
         else:
             return self._load_npy("image_test%02d.npy" % idx), idx
 
@@ -85,37 +94,48 @@ loss_dict = {
 @click.command()
 @click.option('--loss_type', default = 'dice')
 @click.option('--exp_name', default = 'test')
-def main(loss_type, exp_name):
+@click.option('--use_aug', default = False, is_flag=True)
+def main(loss_type, exp_name, use_aug):
 
     loss_fn = loss_dict[loss_type]
     saver = Saver('runs', exp_name)
+
+    training_transform = None
+    if use_aug:
+        print('Using Transforms!')
+        training_transform = tio.Compose([
+        tio.RandomNoise(p=0.5,std=2,mean=0),
+        tio.RandomAffine(p=0.8,scales=0.1,degrees=5)
+    ])
     ## training
     model = UNet(1,1)  # input 1-channel 3d volume and output 1-channel segmentation (a probability map)
     if use_cuda:
         model.cuda()
 
     # train/val split
-    train_set = NPyDataset(folder_name)
-    train_idxs = [i for i in range(50)]
-    random.Random(99).shuffle(train_idxs)
-    val_set = torch.utils.data.Subset(train_set,train_idxs[:10])
-    new_train_set = torch.utils.data.Subset(train_set,train_idxs[10:])
+    idxs = [i for i in range(50)]
+    random.Random(99).shuffle(idxs)
+    train_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=training_transform),idxs[:10])
+    val_set = torch.utils.data.Subset(NPyDataset(folder_name, transform=None),idxs[10:])
 
     train_loader = torch.utils.data.DataLoader(
-        new_train_set,
+        train_set,
         batch_size=4,
         shuffle=True,
         num_workers=4,
         persistent_workers = True,
         pin_memory= True)
+    
+    print(f"Training Set size: {len(train_set)}")
 
     val_loader = torch.utils.data.DataLoader(
         val_set,
-        batch_size=5,
+        batch_size=2,
         shuffle=False,
-        num_workers=1,
+        num_workers=2,
         persistent_workers = True,
         pin_memory= True)
+    print(f"Validation Set size: {len(val_set)}")
 
     val_loader_final = torch.utils.data.DataLoader(
         val_set,
